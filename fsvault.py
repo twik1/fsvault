@@ -1,11 +1,10 @@
-# checksum in the archive
 # choose working directory
 # add gui with drag and drop
-# add file info to db
-# add extended attribute to db
 # add list db functions
 # uuid for mac
 # how to handle unknown system
+# Readme file of fsvault
+# delete a file or directory
 
 import argparse
 import os
@@ -81,6 +80,14 @@ class Cdb:
         else:
             return True
 
+    def output_db(self):
+        sql = '''SELECT * FROM SYSTEM'''
+        self.cur.execute(sql)
+        sys_info = self.cur.fetchone()
+        print('Unique ID\t{}'.format(sys_info[0]))
+        print('Hostname\t{}'.format(sys_info[1]))
+        print('Vault created\t{}.')
+
 class Cvault:
     def __init__(self, vault):
         self.wdir = os.path.dirname(os.path.realpath(__file__))
@@ -109,6 +116,14 @@ class Cvault:
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
 
+    def md5zip(self, vault, fname):
+        hash_md5 = hashlib.md5()
+        archive = ZipFile(vault)
+        f = archive.open(fname)
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+
     def sha256(self, fname):
         hash_sha256 = hashlib.sha256()
         with open(fname, "rb") as f:
@@ -116,9 +131,24 @@ class Cvault:
                 hash_sha256.update(chunk)
         return hash_sha256.hexdigest()
 
+    def sha256zip(self, vault, fname):
+        hash_sha256 = hashlib.sha256()
+        archive = ZipFile(vault)
+        f = archive.open(fname)
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
+
     def add_file_info(self, file, cdb):
         x = xattr.xattr(file)
         info = (file, self.md5(file), self.sha256(file), datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()))
+        cdb.add_file(info)
+
+    def add_file_info_zip(self, file, cdb):
+        x = xattr.xattr(file)
+        chkmd5 = self.md5zip(self.vault, file.strip('/'))
+        chksha256 = self.sha256zip(self.vault, file.strip('/'))
+        info = (file, chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()))
         cdb.add_file(info)
 
     def add_file(self, file):
@@ -126,9 +156,10 @@ class Cvault:
         if self.db.check_file(file_with_path):
             print('File already in vault {}'.format(file_with_path))
             return
-        self.add_file_info(file_with_path, self.db)
+        #self.add_file_info(file_with_path, self.db)
         with ZipFile(os.path.join(self.wdir, self.vault), 'w') as zip:
             zip.write(file_with_path)
+        self.add_file_info_zip(file_with_path, self.db)
 
     def add_dir(self, dir):
         with ZipFile(os.path.join(self.wdir, self.vault), 'w') as zip:
@@ -160,13 +191,17 @@ if __name__ == '__main__':
     privesc_parameter = {}
     parser = argparse.ArgumentParser(description='fsvault v0.1')
     parser.add_argument('-a', '--add', help='Add file or directory to vault', required=False)
+    parser.add_argument('-l', '--list', help='Add file or directory to vault', required=False, action='store_true')
     #parser.add_argument('-l', '--lock', help='Lock vault', required=False)
     #parser.add_argument('-u', '--unlock', help='Unlock vault', required=False)
     parser.add_argument('vault', help='File System Vault')
     args = parser.parse_args()
 
     vault = Cvault(args.vault)
-    vault.add_object(args.add)
+    if args.add:
+        vault.add_object(args.add)
+    elif args.list:
+        vault.list_db()
     vault.close()
 
 
