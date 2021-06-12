@@ -5,6 +5,7 @@
 # how to handle unknown system
 # Readme file of fsvault
 # delete a file or directory
+# add filesystem info
 
 import argparse
 import os
@@ -86,27 +87,50 @@ class Cdb:
         sys_info = self.cur.fetchone()
         print('Unique ID\t{}'.format(sys_info[0]))
         print('Hostname\t{}'.format(sys_info[1]))
-        print('Vault created\t{}.')
+        print('Platform\t{}'.format(sys_info[2]))
+        print('Created date\t{}'.format(sys_info[3]))
+        print('Last added\t{}'.format(sys_info[4]))
+        sql = '''SELECT * FROM FILE'''
+        self.cur.execute(sql)
+        file_rows = self.cur.fetchall()
+        for row in file_rows:
+            print(row)
+
 
 class Cvault:
     def __init__(self, vault):
+        self.vault = vault
         self.wdir = os.path.dirname(os.path.realpath(__file__))
         os.chdir(self.wdir)
-        self.vault = vault
         self.sys = Csystem()
-        if not os.path.exists(vault):
-            self.new = True
-            self.db = Cdb(os.path.join(self.wdir, '4n6.db'))
-            self.db.add_system(self.sys.get_system())
+        if not os.path.exists(self.vault):
+            # No db exists, this could be ok
+            self.state = 0
         else:
-            self.new = False
+            if self.extract_db():
+                # An archive found without a db, this is not ok
+                self.state = 2
+            else:
+                # An archive found and db extracted
+                self.state = 1
+
+    def extract_db(self):
+        try:
             with ZipFile(os.path.join(self.wdir, self.vault), 'r') as zip:
                 zip.extract('4n6.db')
+        except:
+            print('This is not a fsvault archive')
+            return True
+        self.db = Cdb(os.path.join(self.wdir, '4n6.db'))
+        return False
+
+    def create_db(self):
+        try:
             self.db = Cdb(os.path.join(self.wdir, '4n6.db'))
-            if not self.db.check_system(self.sys.get_system()):
-                print('Current achive is not for this system')
-                os.remove('4n6.db')
-                exit(1)
+            self.db.add_system(self.sys.get_system())
+            return False
+        except:
+            return True
 
 
     def md5(self, fname):
@@ -156,7 +180,6 @@ class Cvault:
         if self.db.check_file(file_with_path):
             print('File already in vault {}'.format(file_with_path))
             return
-        #self.add_file_info(file_with_path, self.db)
         with ZipFile(os.path.join(self.wdir, self.vault), 'w') as zip:
             zip.write(file_with_path)
         self.add_file_info_zip(file_with_path, self.db)
@@ -169,8 +192,8 @@ class Cvault:
                     if self.db.check_file(file_with_path):
                         print('File already in vault {}'.format(file_with_path))
                         continue
-                    self.add_file_info(file_with_path, self.db)
                     zip.write(file_with_path)
+                    self.add_file_info_zip(file_with_path, self.db)
 
     def add_object(self, object):
         if os.path.isfile(object):
@@ -186,12 +209,15 @@ class Cvault:
             zip.write('4n6.db')
         os.remove(db)
 
+    def list_vault(self):
+        self.db.output_db()
+
 
 if __name__ == '__main__':
     privesc_parameter = {}
     parser = argparse.ArgumentParser(description='fsvault v0.1')
     parser.add_argument('-a', '--add', help='Add file or directory to vault', required=False)
-    parser.add_argument('-l', '--list', help='Add file or directory to vault', required=False, action='store_true')
+    parser.add_argument('-l', '--list', help='List files in vaultvault', required=False, action='store_true')
     #parser.add_argument('-l', '--lock', help='Lock vault', required=False)
     #parser.add_argument('-u', '--unlock', help='Unlock vault', required=False)
     parser.add_argument('vault', help='File System Vault')
@@ -199,10 +225,22 @@ if __name__ == '__main__':
 
     vault = Cvault(args.vault)
     if args.add:
-        vault.add_object(args.add)
+        if vault.state > 1:
+            # output error and quit
+            None
+        elif vault.state == 1 or vault.state == 0:
+            if vault.state == 0:
+                if vault.create_db():
+                    # output error and quit
+                    None
+            vault.add_object(args.add)
+            vault.close()
     elif args.list:
-        vault.list_db()
-    vault.close()
+        if not vault.state == 1:
+            # output error and quit
+            None
+        vault.list_vault()
+
 
 
 
