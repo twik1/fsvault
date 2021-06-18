@@ -185,6 +185,7 @@ class Cvault:
         self.add_file_info_zip(file_with_path, self.db)
 
     def add_dir(self, dir):
+        file_list = []
         with ZipFile(os.path.join(self.wdir, self.vault), 'w') as zip:
             for path, subdirs, files in os.walk(dir):
                 for name in files:
@@ -193,7 +194,9 @@ class Cvault:
                         print('File already in vault {}'.format(file_with_path))
                         continue
                     zip.write(file_with_path)
-                    self.add_file_info_zip(file_with_path, self.db)
+                    file_list.append(file_with_path)
+        for file in file_list:
+            self.add_file_info_zip(file, self.db)
 
     def add_object(self, object):
         if os.path.isfile(object):
