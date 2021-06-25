@@ -1,7 +1,6 @@
 # choose working directory
 # add gui with drag and drop
 # add list db functions
-# uuid for mac
 # how to handle unknown system
 # Readme file of fsvault
 # delete a file or directory
@@ -17,6 +16,7 @@ from zipfile import ZipFile
 import hashlib
 import sqlite3
 import sys
+import subprocess
 
 class Csystem:
     def __init__(self):
@@ -32,7 +32,12 @@ class Csystem:
             print(self.uuid)
             #self.uuid = subprocess.check_output('reg query HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography /v MachineGuid')
         elif self.platform == 'Darwin':
-            self.uuid = subprocess.check_output('ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID')
+            proc1 = subprocess.Popen(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'], stdout=subprocess.PIPE)
+            proc2 = subprocess.Popen(['grep', 'IOPlatformUUID'], stdin=proc1.stdout,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc1.stdout.close()
+            out, err = proc2.communicate()
+            self.uuid = out.decode('utf-8').split()[-1].strip('"')
             print(self.uuid)
         else:
             print('Unknown system')
@@ -194,6 +199,9 @@ class Cvault:
         if self.db.check_file(file_with_path):
             print('File already in vault {}'.format(file_with_path))
             return
+        if os.path.islink(file_with_path):
+            print('File {} is a symlink, will not follow'.format(file_with_path))
+            return
         with ZipFile(os.path.join(self.wdir, self.vault), 'w') as zip:
             zip.write(file_with_path)
         self.add_file_info_zip(file_with_path, self.db)
@@ -206,6 +214,9 @@ class Cvault:
                     file_with_path = os.path.abspath(os.path.join(path, name))
                     if self.db.check_file(file_with_path):
                         print('File already in vault {}'.format(file_with_path))
+                        continue
+                    if os.path.islink(file_with_path):
+                        print('File {} is a symlink, will not follow'.format(file_with_path))
                         continue
                     zip.write(file_with_path)
                     file_list.append(file_with_path)
