@@ -29,8 +29,11 @@ class Csystem:
                 print('no uuid found')
         elif self.platform == 'Windows':
             self.uuid = subprocess.check_output('wmic csproduct get UUID')
+            print(self.uuid)
+            #self.uuid = subprocess.check_output('reg query HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography /v MachineGuid')
         elif self.platform == 'Darwin':
-            None
+            self.uuid = subprocess.check_output('ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID')
+            print(self.uuid)
         else:
             print('Unknown system')
             self.uuid = '0'
