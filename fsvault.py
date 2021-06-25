@@ -16,6 +16,7 @@ from datetime import datetime
 from zipfile import ZipFile
 import hashlib
 import sqlite3
+import sys
 
 class Csystem:
     def __init__(self):
@@ -81,6 +82,11 @@ class Cdb:
         else:
             return True
 
+    def check_any_file(self):
+        self.cur.execute('SELECT * FROM FILE')
+        files = self.cur.fetchall()
+        return files
+
     def output_db(self):
         sql = '''SELECT * FROM SYSTEM'''
         self.cur.execute(sql)
@@ -90,12 +96,16 @@ class Cdb:
         print('Platform\t{}'.format(sys_info[2]))
         print('Created date\t{}'.format(sys_info[3]))
         print('Last added\t{}'.format(sys_info[4]))
-        sql = '''SELECT * FROM FILE'''
-        self.cur.execute(sql)
-        file_rows = self.cur.fetchall()
-        for row in file_rows:
-            print(row)
-
+        files = self.check_any_file()
+        print('-----------------')
+        for file in files:
+            print(file[0])
+            print(file[1])
+            print(file[2])
+            print(file[3])
+            print(file[4])
+            print(file[5])
+            print('-----------------')
 
 class Cvault:
     def __init__(self, vault):
@@ -103,6 +113,7 @@ class Cvault:
         self.wdir = os.path.dirname(os.path.realpath(__file__))
         os.chdir(self.wdir)
         self.sys = Csystem()
+        self.del_list = {}
         if not os.path.exists(self.vault):
             # No db exists, this could be ok
             self.state = 0
@@ -206,6 +217,9 @@ class Cvault:
         else:
             print('{} in not a valid filesystem object'.format(object))
 
+    def del_object(self, object):
+        print('Not implemented yet')
+
     def close(self):
         db = os.path.join(self.wdir, '4n6.db')
         with ZipFile(os.path.join(self.wdir, self.vault), 'a') as zip:
@@ -220,7 +234,8 @@ if __name__ == '__main__':
     privesc_parameter = {}
     parser = argparse.ArgumentParser(description='fsvault v0.1')
     parser.add_argument('-a', '--add', help='Add file or directory to vault', required=False)
-    parser.add_argument('-l', '--list', help='List files in vaultvault', required=False, action='store_true')
+    parser.add_argument('-l', '--list', help='List files in vault', required=False, action='store_true')
+    parser.add_argument('-d', '--delete', help='Delete files from vault', required=False)
     #parser.add_argument('-l', '--lock', help='Lock vault', required=False)
     #parser.add_argument('-u', '--unlock', help='Unlock vault', required=False)
     parser.add_argument('vault', help='File System Vault')
@@ -243,6 +258,11 @@ if __name__ == '__main__':
             # output error and quit
             None
         vault.list_vault()
+    elif args.delete:
+        if not vault.state == 1:
+            # output error and quit
+            None
+        vault.del_object(args.delete)
 
 
 
