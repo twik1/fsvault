@@ -18,6 +18,7 @@ import sys
 import subprocess
 import importlib
 from pathlib import Path
+import time
 
 try:
     importlib.import_module('xattr')
@@ -37,8 +38,7 @@ class Csystem:
             except:
                 print('no uuid found')
         elif self.platform == 'Windows':
-            self.uuid = subprocess.check_output('wmic csproduct get UUID')
-            print(self.uuid)
+            self.uuid = str(subprocess.check_output('wmic csproduct get UUID')).split()[1].strip('\\r\\n')
             #self.uuid = subprocess.check_output('reg query HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography /v MachineGuid')
         elif self.platform == 'Darwin':
             proc1 = subprocess.Popen(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'], stdout=subprocess.PIPE)
@@ -58,6 +58,7 @@ class Csystem:
 
 class Cdb:
     def __init__(self, db):
+        self.db = db
         self.conn = sqlite3.connect(db)
         self.cur = self.conn.cursor()
         self.cur.execute(''' SELECT COUNT(name) FROM sqlite_master WHERE type='table' AND name='FILE' ''')
@@ -65,6 +66,9 @@ class Cdb:
             None
         else:
             self.init_db()
+            
+    def close_db(self):
+        self.conn.close()
 
     def init_db(self):
         self.cur.execute('''CREATE TABLE SYSTEM ([UUID] Text, [HostName] Text, [Platform] Text, [Start] DateTime, [Last] Date)''')
@@ -134,7 +138,7 @@ class Cvault:
         self.sys = Csystem()
         self.del_list = {}
         if not self.vault.is_file():
-            # No db exists, this could be ok
+            # No archive exists, this could be ok
             self.state = 0
         else:
             if self.extract_db():
@@ -151,7 +155,7 @@ class Cvault:
         except:
             print('This is not a fsvault archive')
             return True
-        self.db = Cdb(os.path.join(self.wdir, '4n6.db'))
+        self.db = Cdb(self.wdir / '4n6.db')
         return False
 
     def create_db(self):
@@ -173,7 +177,7 @@ class Cvault:
     def md5zip(self, vault, fname):
         hash_md5 = hashlib.md5()
         archive = ZipFile(vault)
-        f = archive.open(fname.as_posix().strip('/'),'r')
+        f = archive.open(Path(*fname.parts[1:]).as_posix(), 'r')
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
         return hash_md5.hexdigest()
@@ -188,7 +192,7 @@ class Cvault:
     def sha256zip(self, vault, fname):
         hash_sha256 = hashlib.sha256()
         archive = ZipFile(vault)
-        f = archive.open(fname.as_posix().strip('/'))
+        f = archive.open(Path(*fname.parts[1:]).as_posix(), 'r')
         for chunk in iter(lambda: f.read(4096), b""):
             hash_sha256.update(chunk)
         return hash_sha256.hexdigest()
@@ -252,10 +256,11 @@ class Cvault:
         print('Not implemented yet')
 
     def close(self):
-        db = os.path.join(self.wdir, '4n6.db')
-        with ZipFile(os.path.join(self.wdir, self.vault), 'a') as zip:
+        with ZipFile(self.vault, 'a') as zip:
             zip.write('4n6.db')
-        os.remove(db)
+        zip.close()
+        self.db.close_db()
+        os.remove(self.db.db)
 
     def list_vault(self):
         self.db.output_db()
