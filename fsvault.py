@@ -10,13 +10,21 @@ import argparse
 import os
 import platform
 import socket
-import xattr
 from datetime import datetime
 from zipfile import ZipFile
 import hashlib
 import sqlite3
 import sys
 import subprocess
+import importlib
+from pathlib import Path
+
+try:
+    importlib.import_module('xattr')
+    module_xattr = True
+except ImportError:
+    module_xattr = False
+
 
 class Csystem:
     def __init__(self):
@@ -83,7 +91,7 @@ class Cdb:
             return False
 
     def check_file(self, file):
-        self.cur.execute('SELECT * FROM FILE WHERE FULLPATH=?',(file,))
+        self.cur.execute('SELECT * FROM FILE WHERE FULLPATH=?',(file.as_posix(),))
         file_info = self.cur.fetchone()
         if not file_info:
             return False
@@ -117,12 +125,14 @@ class Cdb:
 
 class Cvault:
     def __init__(self, vault):
-        self.vault = vault
-        self.wdir = os.path.dirname(os.path.realpath(__file__))
+        #self.vault = Path(vault)
+        #self.wdir = os.path.dirname(os.path.realpath(__file__))
+        self.wdir = Path(__file__).resolve().parents[0]
         os.chdir(self.wdir)
+        self.vault = Path(vault).resolve()
         self.sys = Csystem()
         self.del_list = {}
-        if not os.path.exists(self.vault):
+        if not self.vault.is_file():
             # No db exists, this could be ok
             self.state = 0
         else:
@@ -135,7 +145,7 @@ class Cvault:
 
     def extract_db(self):
         try:
-            with ZipFile(os.path.join(self.wdir, self.vault), 'r') as zip:
+            with ZipFile(self.vault, 'r') as zip:
                 zip.extract('4n6.db')
         except:
             print('This is not a fsvault archive')
@@ -145,7 +155,7 @@ class Cvault:
 
     def create_db(self):
         try:
-            self.db = Cdb(os.path.join(self.wdir, '4n6.db'))
+            self.db = Cdb(self.wdir / '4n6.db')
             self.db.add_system(self.sys.get_system())
             return False
         except:
@@ -162,6 +172,7 @@ class Cvault:
     def md5zip(self, vault, fname):
         hash_md5 = hashlib.md5()
         archive = ZipFile(vault)
+        print('file: {}'.format(fname))
         f = archive.open(fname)
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
@@ -183,39 +194,45 @@ class Cvault:
         return hash_sha256.hexdigest()
 
     def add_file_info(self, file, cdb):
-        x = xattr.xattr(file)
-        info = (file, self.md5(file), self.sha256(file), datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()))
+        if module_xattr:
+            x = xattr.xattr(file)
+            info = (file, self.md5(file), self.sha256(file), datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()))
+        else:
+            info = (file, self.md5(file), self.sha256(file), datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''))
         cdb.add_file(info)
 
     def add_file_info_zip(self, file, cdb):
-        x = xattr.xattr(file)
-        chkmd5 = self.md5zip(self.vault, file.strip('/'))
-        chksha256 = self.sha256zip(self.vault, file.strip('/'))
-        info = (file, chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()))
+        chkmd5 = self.md5zip(self.vault, file)
+        chksha256 = self.sha256zip(self.vault, file)
+        if module_xattr:
+            x = xattr.xattr(file)
+            info = (file, chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()))
+        else:
+            info = (file, chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''))
         cdb.add_file(info)
 
     def add_file(self, file):
-        file_with_path = os.path.abspath(file)
+        file_with_path = Path(file).resolve().parents[0]
         if self.db.check_file(file_with_path):
             print('File already in vault {}'.format(file_with_path))
             return
-        if os.path.islink(file_with_path):
+        if file_with_path.is_symlink():
             print('File {} is a symlink, will not follow'.format(file_with_path))
             return
-        with ZipFile(os.path.join(self.wdir, self.vault), 'w') as zip:
+        with ZipFile(self.vault, 'w') as zip:
             zip.write(file_with_path)
         self.add_file_info_zip(file_with_path, self.db)
 
     def add_dir(self, dir):
         file_list = []
-        with ZipFile(os.path.join(self.wdir, self.vault), 'w') as zip:
+        with ZipFile(self.vault, 'w') as zip:
             for path, subdirs, files in os.walk(dir):
                 for name in files:
-                    file_with_path = os.path.abspath(os.path.join(path, name))
+                    file_with_path = Path(path) / name
                     if self.db.check_file(file_with_path):
                         print('File already in vault {}'.format(file_with_path))
                         continue
-                    if os.path.islink(file_with_path):
+                    if file_with_path.is_symlink():
                         print('File {} is a symlink, will not follow'.format(file_with_path))
                         continue
                     zip.write(file_with_path)
