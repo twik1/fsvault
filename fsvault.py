@@ -1,6 +1,5 @@
 # choose working directory
 # add gui with drag and drop
-# add list db functions
 # how to handle unknown system
 # Readme file of fsvault
 # delete a file or directory
@@ -18,7 +17,6 @@ import sys
 import subprocess
 import importlib
 from pathlib import Path
-import time
 
 try:
     importlib.import_module('xattr')
@@ -47,7 +45,6 @@ class Csystem:
             proc1.stdout.close()
             out, err = proc2.communicate()
             self.uuid = out.decode('utf-8').split()[-1].strip('"')
-            print(self.uuid)
         else:
             print('Unknown system')
             self.uuid = '0'
@@ -255,10 +252,12 @@ class Cvault:
     def del_object(self, object):
         print('Not implemented yet')
 
-    def close(self):
+    def write_back_db(self):
         with ZipFile(self.vault, 'a') as zip:
             zip.write('4n6.db')
         zip.close()
+
+    def close(self):
         self.db.close_db()
         os.remove(self.db.db)
 
@@ -288,12 +287,14 @@ if __name__ == '__main__':
                     # output error and quit
                     None
             vault.add_object(args.add)
+            vault.write_back_db()
             vault.close()
     elif args.list:
         if not vault.state == 1:
             # output error and quit
             None
         vault.list_vault()
+        vault.close()
     elif args.delete:
         if not vault.state == 1:
             # output error and quit
