@@ -17,6 +17,8 @@ import sys
 import subprocess
 import importlib
 from pathlib import Path
+import psutil
+
 
 try:
     importlib.import_module('xattr')
@@ -264,6 +266,16 @@ class Cvault:
     def list_vault(self):
         self.db.output_db()
 
+    def get_fs_type(self, mypath):
+        root_type = ""
+        for part in psutil.disk_partitions():
+            if part.mountpoint == '/':
+                root_type = part.fstype
+                continue
+            if mypath.startswith(part.mountpoint):
+                return part.fstype
+        return root_type
+
 
 if __name__ == '__main__':
     privesc_parameter = {}
@@ -291,14 +303,15 @@ if __name__ == '__main__':
             vault.close()
     elif args.list:
         if not vault.state == 1:
-            # output error and quit
-            None
+            print('No such vault {}'.format(args.vault))
+            exit(1)
         vault.list_vault()
         vault.close()
     elif args.delete:
         if not vault.state == 1:
             # output error and quit
             None
+        print(psutil.disk_partitions())
         vault.del_object(args.delete)
 
 
