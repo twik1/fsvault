@@ -1,9 +1,15 @@
-# choose working directory
-# add gui with drag and drop
-# how to handle unknown system
-# Readme file of fsvault
-# delete a file or directory
-# add filesystem info
+"""
+Prettyprint filestats
+    1 Ok dates for MAC time
+Prevent adding files from another system
+Prettyprint the extended attributes
+Fix PEP warnings
+choose working directory
+add gui with drag and drop
+how to handle unknown system
+Readme file of fsvault
+delete a file or directory
+"""
 
 import argparse
 import os
@@ -13,7 +19,6 @@ from datetime import datetime
 from zipfile import ZipFile
 import hashlib
 import sqlite3
-import sys
 import subprocess
 import importlib
 from pathlib import Path
@@ -37,16 +42,24 @@ class Csystem:
                 self.uuid = os.popen('cat /etc/machine-id').read().strip()
             except:
                 print('no uuid found')
+                self.uuid = '1'
         elif self.platform == 'Windows':
-            self.uuid = str(subprocess.check_output('wmic csproduct get UUID')).split()[1].strip('\\r\\n')
-            #self.uuid = subprocess.check_output('reg query HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography /v MachineGuid')
+            try:
+                self.uuid = str(subprocess.check_output('wmic csproduct get UUID')).split()[1].strip('\\r\\n')
+                #self.uuid = subprocess.check_output('reg query HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography /v MachineGuid')
+            except:
+                print('no uuid found')
+                self.uuid = '1'
         elif self.platform == 'Darwin':
-            proc1 = subprocess.Popen(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'], stdout=subprocess.PIPE)
-            proc2 = subprocess.Popen(['grep', 'IOPlatformUUID'], stdin=proc1.stdout,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            proc1.stdout.close()
-            out, err = proc2.communicate()
-            self.uuid = out.decode('utf-8').split()[-1].strip('"')
+            try:
+                proc1 = subprocess.Popen(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'], stdout=subprocess.PIPE)
+                proc2 = subprocess.Popen(['grep', 'IOPlatformUUID'], stdin=proc1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                proc1.stdout.close()
+                out, err = proc2.communicate()
+                self.uuid = out.decode('utf-8').split()[-1].strip('"')
+            except:
+                print('no uuid found')
+                self.uuid = '1'
         else:
             print('Unknown system')
             self.uuid = '0'
@@ -71,11 +84,11 @@ class Cdb:
 
     def init_db(self):
         self.cur.execute('''CREATE TABLE SYSTEM ([UUID] Text, [HostName] Text, [Platform] Text, [Start] DateTime, [Last] Date)''')
-        self.cur.execute('''CREATE TABLE FILE ([FULLPATH] Text, [MD5] Text, [SHA256] Text, [SEIZEDATE] Date, [STAT] Text, [XATTR] Text)''')
+        self.cur.execute('''CREATE TABLE FILE ([FULLPATH] Text, [MD5] Text, [SHA256] Text, [SEIZEDATE] Date, [STAT] Text, [XATTR] Text, [FSYSTEM] Text)''')
         self.conn.commit()
 
     def add_file(self, info):
-        sql = '''INSERT INTO FILE (FULLPATH, MD5, SHA256, SEIZEDATE, STAT, XATTR) VALUES (?,?,?,?,?,?)'''
+        sql = '''INSERT INTO FILE (FULLPATH, MD5, SHA256, SEIZEDATE, STAT, XATTR, FSYSTEM) VALUES (?,?,?,?,?,?,?)'''
         self.cur.execute(sql, info)
         self.conn.commit()
 
@@ -119,18 +132,19 @@ class Cdb:
         files = self.check_any_file()
         print('-----------------')
         for file in files:
-            print(file[0])
-            print(file[1])
-            print(file[2])
-            print(file[3])
-            print(file[4])
-            print(file[5])
+            print('Filename and path\t{}'.format(file[0]))
+            print('MD5 checksum\t\t{}'.format(file[1]))
+            print('SHA256 checksum\t\t{}'.format(file[2]))
+            print('Date seized\t\t{}'.format(file[3]))
+            print('File stats\t\t{}'.format(file[4]))
+            print('Extended attributes\t{}'.format(file[5]))
+            print('Filesystem type\t\t{}'.format(file[6]))
             print('-----------------')
 
 class Cvault:
     def __init__(self, vault):
-        #self.vault = Path(vault)
-        #self.wdir = os.path.dirname(os.path.realpath(__file__))
+        # self.vault = Path(vault)
+        # self.wdir = os.path.dirname(os.path.realpath(__file__))
         self.wdir = Path(__file__).resolve().parents[0]
         os.chdir(self.wdir)
         self.vault = Path(vault).resolve()
@@ -207,11 +221,12 @@ class Cvault:
     def add_file_info_zip(self, file, cdb):
         chkmd5 = self.md5zip(self.vault, file)
         chksha256 = self.sha256zip(self.vault, file)
+        fsystem = self.get_fs_type(str(file.parent))
         if module_xattr:
             x = xattr.xattr(file)
-            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()))
+            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()), fsystem)
         else:
-            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''))
+            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''), fsystem)
         cdb.add_file(info)
 
     def add_file(self, file):
@@ -291,13 +306,13 @@ if __name__ == '__main__':
     vault = Cvault(args.vault)
     if args.add:
         if vault.state > 1:
-            # output error and quit
-            None
+            print('Vault {} is not a fsvault'.format(args.vault))
+            exit(1)
         elif vault.state == 1 or vault.state == 0:
             if vault.state == 0:
                 if vault.create_db():
-                    # output error and quit
-                    None
+                    print('Unable to create the datbase {}'.format(vault.wdir / '4n6.db'))
+                    exit(1)
             vault.add_object(args.add)
             vault.write_back_db()
             vault.close()
@@ -309,9 +324,7 @@ if __name__ == '__main__':
         vault.close()
     elif args.delete:
         if not vault.state == 1:
-            # output error and quit
-            None
-        print(psutil.disk_partitions())
+            print('None or faulty fsvault {}'.format(args.vault))
         vault.del_object(args.delete)
 
 
