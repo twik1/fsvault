@@ -313,6 +313,10 @@ if __name__ == '__main__':
                 if vault.create_db():
                     print('Unable to create the datbase {}'.format(vault.wdir / '4n6.db'))
                     exit(1)
+            else:
+                if not vault.db.check_system(vault.sys.get_system()):
+                    print('Don\'t mix files from different systems')
+                    exit(1)
             vault.add_object(args.add)
             vault.write_back_db()
             vault.close()
