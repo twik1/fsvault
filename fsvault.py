@@ -1,13 +1,12 @@
 """
 Prettyprint filestats
     1 Ok dates for MAC time
-Prevent adding files from another system
+    2 uid och gid for the system
 Prettyprint the extended attributes
 Fix PEP warnings
 choose working directory
 add gui with drag and drop
 how to handle unknown system
-Readme file of fsvault
 delete a file or directory
 """
 
