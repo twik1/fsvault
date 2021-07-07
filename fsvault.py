@@ -1,7 +1,6 @@
 """
 Prettyprint filestats
     1 Ok dates for MAC time
-    2 uid och gid for the system
 Prettyprint the extended attributes
 Fix PEP warnings
 choose working directory
@@ -66,7 +65,8 @@ class Csystem:
         elif self.platform == 'Darwin':
             try:
                 proc1 = subprocess.Popen(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'], stdout=subprocess.PIPE)
-                proc2 = subprocess.Popen(['grep', 'IOPlatformUUID'], stdin=proc1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                proc2 = subprocess.Popen(['grep', 'IOPlatformUUID'], stdin=proc1.stdout, stdout=subprocess.PIPE,\
+                                         stderr=subprocess.PIPE)
                 proc1.stdout.close()
                 out, err = proc2.communicate()
                 self.uuid = out.decode('utf-8').split()[-1].strip('"')
@@ -111,7 +111,8 @@ class Csystem:
 
     def get_file_owner(self, file):
         if self.platform == 'Windows':
-            session = subprocess.Popen(['cmd', '/c', 'dir', '/q', file], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            session = subprocess.Popen(['cmd', '/c', 'dir', '/q', file], stdin=subprocess.PIPE, stdout=subprocess.PIPE,\
+                                       stderr=subprocess.PIPE)
             result = session.communicate()[0].decode('cp1252')
             tst = file.owner()
             if file.is_dir():
@@ -124,7 +125,8 @@ class Csystem:
                         return self.convert_cat(line)
                 else:
                     raise Exception('Could not locate file')
-
+        elif self.platform == 'Linux':
+            return 'owner:{},group:{}'.format(file.owner(), file.group())
 
 class Cdb:
     def __init__(self, db):
@@ -141,12 +143,15 @@ class Cdb:
         self.conn.close()
 
     def init_db(self):
-        self.cur.execute('''CREATE TABLE SYSTEM ([UUID] Text, [HostName] Text, [Platform] Text, [Start] DateTime, [Last] Date)''')
-        self.cur.execute('''CREATE TABLE FILE ([FULLPATH] Text, [MD5] Text, [SHA256] Text, [SEIZEDATE] Date, [STAT] Text, [XATTR] Text, [FSYSTEM] Text)''')
+        self.cur.execute('''CREATE TABLE SYSTEM ([UUID] Text, [HostName] Text, [Platform] Text, [Start] DateTime,\
+         [Last] Date)''')
+        self.cur.execute('''CREATE TABLE FILE ([FULLPATH] Text, [MD5] Text, [SHA256] Text, [SEIZEDATE] Date,\
+         [STAT] Text, [XATTR] Text, [FSYSTEM] Text, [OWNER] Text)''')
         self.conn.commit()
 
     def add_file(self, info):
-        sql = '''INSERT INTO FILE (FULLPATH, MD5, SHA256, SEIZEDATE, STAT, XATTR, FSYSTEM) VALUES (?,?,?,?,?,?,?)'''
+        sql = '''INSERT INTO FILE (FULLPATH, MD5, SHA256, SEIZEDATE, STAT, XATTR, FSYSTEM, OWNER)\
+         VALUES (?,?,?,?,?,?,?,?)'''
         self.cur.execute(sql, info)
         self.conn.commit()
 
@@ -197,6 +202,7 @@ class Cdb:
             print('File stats\t\t{}'.format(file[4]))
             print('Extended attributes\t{}'.format(file[5]))
             print('Filesystem type\t\t{}'.format(file[6]))
+            print('Fileowner\t\t{}'.format(file[7]))
             print('-----------------')
 
 class Cvault:
@@ -237,14 +243,6 @@ class Cvault:
         except:
             return True
 
-
-#    def md5(self, fname):
-#        hash_md5 = hashlib.md5()
-#        with open(fname, "rb") as f:
-#            for chunk in iter(lambda: f.read(4096), b""):
-#                hash_md5.update(chunk)
-#        return hash_md5.hexdigest()
-
     def md5zip(self, vault, fname):
         hash_md5 = hashlib.md5()
         archive = ZipFile(vault)
@@ -252,13 +250,6 @@ class Cvault:
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
         return hash_md5.hexdigest()
-
-#    def sha256(self, fname):
-#        hash_sha256 = hashlib.sha256()
-#        with open(fname, "rb") as f:
-#            for chunk in iter(lambda: f.read(4096), b""):
-#                hash_sha256.update(chunk)
-#        return hash_sha256.hexdigest()
 
     def sha256zip(self, vault, fname):
         hash_sha256 = hashlib.sha256()
@@ -268,14 +259,6 @@ class Cvault:
             hash_sha256.update(chunk)
         return hash_sha256.hexdigest()
 
-#    def add_file_info(self, file, cdb):
-#        if module_xattr:
-#            x = xattr.xattr(file)
-#            info = (file.as_posix(), self.md5(file), self.sha256(file), datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()))
-#        else:
-#            info = (file.as_posix(), self.md5(file), self.sha256(file), datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''))
-#        cdb.add_file(info)
-
     def add_file_info_zip(self, file, cdb):
         chkmd5 = self.md5zip(self.vault, file)
         chksha256 = self.sha256zip(self.vault, file)
@@ -283,9 +266,11 @@ class Cvault:
         fowner = self.sys.get_file_owner(file)
         if module_xattr:
             x = xattr.xattr(file)
-            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()), fsystem)
+            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)),\
+                    '{}'.format(x.items()), fsystem, fowner)
         else:
-            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''), fsystem)
+            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''),\
+                    fsystem, fowner)
         cdb.add_file(info)
 
     def add_file(self, file):
