@@ -8,6 +8,8 @@ choose working directory
 add gui with drag and drop
 how to handle unknown system
 delete a file or directory
+remove os
+Create multiple requirements files
 """
 
 import argparse
@@ -22,8 +24,11 @@ import subprocess
 import importlib
 from pathlib import Path
 import psutil
+from collections import namedtuple
 
-
+'''
+Problems importing xattr in windows
+'''
 try:
     importlib.import_module('xattr')
     import xattr
@@ -31,6 +36,15 @@ try:
 except ImportError:
     module_xattr = False
 
+'''
+'''
+try:
+    importlib.import_module('getpwuid')
+    from pwd import getpwuid
+    from grp import getgrgid
+    module_getpwuid = True
+except ImportError:
+    module_xattr = False
 
 class Csystem:
     def __init__(self):
@@ -65,6 +79,51 @@ class Csystem:
 
     def get_system(self):
         return (self.uuid, self.fqdn, self.platform)
+
+    def sliceit(self, iterable, tup):
+        return iterable[tup[0]:tup[1]].strip()
+
+    '''
+    Help functions for getting windows file owner.
+    Should be rewritten
+    '''
+    def convert_cat(self, line):
+        # Column Align Text indicies from cmd
+        # Date time dir filesize owner filename
+        Stat = namedtuple('Stat', 'date time directory size owner filename')
+        stat_index = Stat(date=(0, 11),
+                          time=(11, 18),
+                          directory=(18, 27),
+                          size=(27, 35),
+                          owner=(35, 59),
+                          filename=(59, -1))
+
+        stat = Stat(date=self.sliceit(line, stat_index.date),
+                    time=self.sliceit(line, stat_index.time),
+                    directory=self.sliceit(line, stat_index.directory),
+                    size=self.sliceit(line, stat_index.size),
+                    owner=self.sliceit(line, stat_index.owner),
+                    filename=self.sliceit(line, stat_index.filename))
+        return stat
+    '''
+    end
+    '''
+
+    def get_file_owner(self, file):
+        if self.platform == 'Windows':
+            session = subprocess.Popen(['cmd', '/c', 'dir', '/q', file], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = session.communicate()[0].decode('cp1252')
+            tst = file.owner()
+            if file.is_dir():
+                line = result.splitlines()[5]
+                return self.convert_cat(line)
+            else:
+                for line in result.splitlines()[5:]:
+                    filename = file.name
+                    if filename in line:
+                        return self.convert_cat(line)
+                else:
+                    raise Exception('Could not locate file')
 
 
 class Cdb:
@@ -221,6 +280,7 @@ class Cvault:
         chkmd5 = self.md5zip(self.vault, file)
         chksha256 = self.sha256zip(self.vault, file)
         fsystem = self.get_fs_type(str(file.parent))
+        fowner = self.sys.get_file_owner(file)
         if module_xattr:
             x = xattr.xattr(file)
             info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(x.items()), fsystem)
