@@ -35,15 +35,6 @@ try:
 except ImportError:
     module_xattr = False
 
-'''
-'''
-try:
-    importlib.import_module('getpwuid')
-    from pwd import getpwuid
-    from grp import getgrgid
-    module_getpwuid = True
-except ImportError:
-    module_xattr = False
 
 class Csystem:
     def __init__(self):
@@ -125,7 +116,7 @@ class Csystem:
                         return self.convert_cat(line)
                 else:
                     raise Exception('Could not locate file')
-        elif self.platform == 'Linux':
+        elif self.platform == 'Darwin' or self.platform == 'Linux':
             return 'owner:{},group:{}'.format(file.owner(), file.group())
 
 class Cdb:
