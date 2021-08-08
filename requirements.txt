@@ -1,0 +1,4 @@
+cffi==1.14.5
+psutil==5.8.0
+pycparser==2.20
+xattr==0.9.7
