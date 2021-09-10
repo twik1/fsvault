@@ -49,14 +49,15 @@ class Csystem:
         elif self.platform == 'Windows':
             try:
                 self.uuid = str(subprocess.check_output('wmic csproduct get UUID')).split()[1].strip('\\r\\n')
-                #self.uuid = subprocess.check_output('reg query HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography /v MachineGuid')
+                # self.uuid = subprocess.check_output
+                #           ('reg query HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography /v MachineGuid')
             except:
                 print('no uuid found')
                 self.uuid = '1'
         elif self.platform == 'Darwin':
             try:
                 proc1 = subprocess.Popen(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'], stdout=subprocess.PIPE)
-                proc2 = subprocess.Popen(['grep', 'IOPlatformUUID'], stdin=proc1.stdout, stdout=subprocess.PIPE,\
+                proc2 = subprocess.Popen(['grep', 'IOPlatformUUID'], stdin=proc1.stdout, stdout=subprocess.PIPE,
                                          stderr=subprocess.PIPE)
                 proc1.stdout.close()
                 out, err = proc2.communicate()
@@ -69,7 +70,7 @@ class Csystem:
             self.uuid = '0'
 
     def get_system(self):
-        return (self.uuid, self.fqdn, self.platform)
+        return self.uuid, self.fqdn, self.platform
 
     def sliceit(self, iterable, tup):
         return iterable[tup[0]:tup[1]].strip()
@@ -102,10 +103,10 @@ class Csystem:
 
     def get_file_owner(self, file):
         if self.platform == 'Windows':
-            session = subprocess.Popen(['cmd', '/c', 'dir', '/q', file], stdin=subprocess.PIPE, stdout=subprocess.PIPE,\
+            session = subprocess.Popen(['cmd', '/c', 'dir', '/q', file], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE)
             result = session.communicate()[0].decode('cp1252')
-            tst = file.owner()
+            # tst = file.owner()
             if file.is_dir():
                 line = result.splitlines()[5]
                 return self.convert_cat(line)
@@ -118,6 +119,7 @@ class Csystem:
                     raise Exception('Could not locate file')
         elif self.platform == 'Darwin' or self.platform == 'Linux':
             return 'owner:{},group:{}'.format(file.owner(), file.group())
+
 
 class Cdb:
     def __init__(self, db):
@@ -162,7 +164,7 @@ class Cdb:
             return False
 
     def check_file(self, file):
-        self.cur.execute('SELECT * FROM FILE WHERE FULLPATH=?',(file.as_posix(),))
+        self.cur.execute('SELECT * FROM FILE WHERE FULLPATH=?', (file.as_posix(), ))
         file_info = self.cur.fetchone()
         if not file_info:
             return False
@@ -195,6 +197,7 @@ class Cdb:
             print('Filesystem type\t\t{}'.format(file[6]))
             print('Fileowner\t\t{}'.format(file[7]))
             print('-----------------')
+
 
 class Cvault:
     def __init__(self, vault):
@@ -257,10 +260,10 @@ class Cvault:
         fowner = self.sys.get_file_owner(file)
         if module_xattr:
             x = xattr.xattr(file)
-            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)),\
+            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)),
                     '{}'.format(x.items()), fsystem, fowner)
         else:
-            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''),\
+            info = (file.as_posix(), chkmd5, chksha256, datetime.now(), '{}'.format(os.stat(file)), '{}'.format(''),
                     fsystem, fowner)
         cdb.add_file(info)
 
@@ -333,8 +336,9 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--add', help='Add file or directory to vault', required=False)
     parser.add_argument('-l', '--list', help='List files in vault', required=False, action='store_true')
     parser.add_argument('-d', '--delete', help='Delete files from vault', required=False)
-    #parser.add_argument('-l', '--lock', help='Lock vault', required=False)
-    #parser.add_argument('-u', '--unlock', help='Unlock vault', required=False)
+    # Potential function to add a lock to the vault
+    # parser.add_argument('-l', '--lock', help='Lock vault', required=False)
+    # parser.add_argument('-u', '--unlock', help='Unlock vault', required=False)
     parser.add_argument('vault', help='File System Vault')
     args = parser.parse_args()
 
